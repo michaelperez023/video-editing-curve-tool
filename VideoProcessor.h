@@ -3,6 +3,7 @@ This file contains material supporting chapter 12 of the book:
 OpenCV3 Computer Vision Application Programming Cookbook
 Third Edition
 by Robert Laganiere, Packt Publishing, 2016.
+
 This program is free software; permission is hereby granted to use, copy, modify,
 and distribute this source code, or portions thereof, for any purpose, without fee,
 subject to the restriction that the copyright notice may not be removed
@@ -11,8 +12,52 @@ The software is released on an as-is basis and without any warranties of any kin
 In particular, the software is not guaranteed to be fault-tolerant or free from failure.
 The author disclaims all warranties with regard to this software, any use,
 and any consequent failure, is purely the responsibility of the user.
+
 Copyright (C) 2016 Robert Laganiere, www.laganiere.name
 \*------------------------------------------------------------------------------------------*/
+
+/*
+The book's code repository,
+https://github.com/PacktPublishing/OpenCV3-Computer-Vision-Application-Programming-Cookbook-Third-Edition,
+is distributed under the following license:
+
+MIT License
+
+Copyright (c) 2017 Packt
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// VideoProcessor from the book's Chapter12/videoprocessor.h. Changes made in
+// 2026 for the video curve tool:
+// - The video writer drops frames whose size or number of channels differ
+//   from what it was opened with, without reporting it. setOutput() now
+//   records the size and colour it opens the writer with, writeNextFrame()
+//   checks every frame against them (and checks cv::imwrite for image
+//   output) and returns whether the frame was written, and run() stops at
+//   the first frame that could not be written.
+// - Added getNumberOfWrittenFrames(), writeFailed() and closeOutput(), which
+//   releases the writer so that the output file is complete.
+// - The constructor initialises the members in the order they are declared,
+//   and the image-index checks and the frame count use explicit conversions
+//   (compiler warnings).
+// - Includes for the imgcodecs and videoio modules.
 
 #if !defined VPROCESSOR
 #define VPROCESSOR
@@ -24,6 +69,8 @@ Copyright (C) 2016 Robert Laganiere, www.laganiere.name
 #include <vector>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/videoio.hpp>
 
 // The frame processor interface
 class FrameProcessor {
@@ -70,6 +117,13 @@ private:
 	cv::VideoWriter writer;
 	// output filename
 	std::string outputFile;
+	// frame size and colour the writer was opened with
+	cv::Size outputSize;
+	bool outputIsColor;
+	// number of frames written
+	long writtenFrames;
+	// set when a frame could not be written
+	bool writeError;
 
 	// current index for output images
 	int currentIndex;
@@ -99,27 +153,42 @@ private:
 
 	// to write the output frame 
 	// could be: video file or images
-	void writeNextFrame(cv::Mat& frame) {
+	// returns false if the frame could not be written
+	bool writeNextFrame(cv::Mat& frame) {
+
+		if (frame.empty())
+			return false;
 
 		if (extension.length()) { // then we write images
 
 			std::stringstream ss;
 			ss << outputFile << std::setfill('0') << std::setw(digits) << currentIndex++ << extension;
-			cv::imwrite(ss.str(), frame);
+			if (!cv::imwrite(ss.str(), frame))
+				return false;
 
 		}
 		else { // then write video file
 
+			// the writer silently drops frames that do not have the
+			// size and the number of channels it was opened with
+			if (!writer.isOpened() || frame.depth() != CV_8U || frame.size() != outputSize ||
+				frame.channels() != (outputIsColor ? 3 : 1))
+				return false;
+
 			writer.write(frame);
 		}
+
+		writtenFrames++;
+		return true;
 	}
 
 public:
 
 	// Constructor setting the default values
-	VideoProcessor() : callIt(false), delay(-1),
-		fnumber(0), stop(false), digits(0), frameToStop(-1),
-		process(0), frameProcessor(0) {}
+	VideoProcessor() : process(0), frameProcessor(0),
+		callIt(false), delay(-1), fnumber(0), frameToStop(-1), stop(false),
+		outputIsColor(true), writtenFrames(0), writeError(false),
+		currentIndex(0), digits(0) {}
 
 	// set the name of the video file
 	bool setInput(std::string filename) {
@@ -168,6 +237,8 @@ public:
 
 		outputFile = filename;
 		extension.clear();
+		writtenFrames = 0;
+		writeError = false;
 
 		if (framerate == 0.0)
 			framerate = getFrameRate(); // same as input
@@ -178,11 +249,15 @@ public:
 			codec = getCodec(c);
 		}
 
+		// every frame written must match these
+		outputSize = getFrameSize();
+		outputIsColor = isColor;
+
 		// Open output video
 		return writer.open(outputFile, // filename
 			codec, // codec to be used 
 			framerate,      // frame rate of the video
-			getFrameSize(), // frame size
+			outputSize, // frame size
 			isColor);       // color video?
 	}
 
@@ -200,6 +275,8 @@ public:
 		// filenames and their common extension
 		outputFile = filename;
 		extension = ext;
+		writtenFrames = 0;
+		writeError = false;
 
 		// number of digits in the file numbering scheme
 		digits = numberOfDigits;
@@ -284,6 +361,24 @@ public:
 		return fnumber;
 	}
 
+	// a count is kept of the frames written to the output
+	long getNumberOfWrittenFrames() {
+
+		return writtenFrames;
+	}
+
+	// did run() stop because a frame could not be written?
+	bool writeFailed() {
+
+		return writeError;
+	}
+
+	// close the output video, so that the file is complete
+	void closeOutput() {
+
+		writer.release();
+	}
+
 	// return the size of the video frame
 	cv::Size getFrameSize() {
 
@@ -344,9 +439,9 @@ public:
 	long getTotalFrameCount() {
 
 		// for vector of images
-		if (images.size() != 0) return images.size();
+		if (images.size() != 0) return static_cast<long>(images.size());
 
-		long t = capture.get(cv::CAP_PROP_FRAME_COUNT);
+		long t = static_cast<long>(capture.get(cv::CAP_PROP_FRAME_COUNT));
 		return t;
 	}
 
@@ -380,7 +475,7 @@ public:
 			// move to position in vector
 			itImg = images.begin() + pos;
 			// is it a valid position?
-			if (pos < images.size())
+			if (pos < static_cast<long>(images.size()))
 				return true;
 			else
 				return false;
@@ -412,7 +507,7 @@ public:
 			long posI = static_cast<long>(pos * images.size() + 0.5);
 			itImg = images.begin() + posI;
 			// is it a valid position?
-			if (posI < images.size())
+			if (posI < static_cast<long>(images.size()))
 				return true;
 			else
 				return false;
@@ -483,9 +578,12 @@ public:
 				output = frame;
 			}
 
-			// write output sequence
-			if (outputFile.length() != 0)
-				writeNextFrame(output);
+			// write output sequence; stop if a frame cannot be written
+			if (outputFile.length() != 0 && !writeNextFrame(output)) {
+
+				writeError = true;
+				stopIt();
+			}
 
 			// display output frame
 			if (windowNameOutput.length() != 0)
