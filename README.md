@@ -29,7 +29,7 @@ Wrote 399 of 399 frames to barriers_curves.avi (MJPG, 640x480, 50 fps) in 4.9 s
 Levels over all frames: mean 79.2, standard deviation 58.0 before; mean 120.1, standard deviation 65.5 after
 ```
 
-Curves of the kinds shown in the 2019 report (brightness, contrast and inversion), applied to the whole video. The levels are those of all 399 frames after the curve, as the program reports them; decoding the written video gives the same mean within 0.1 levels.
+Curves of the kinds shown in the 2019 report (brightness, contrast and inversion), applied to the whole video. The levels are those of all 399 frames after the curve, as the program reports them; with conda-forge's OpenCV on macOS, decoding the written video gives the same mean within 0.1 levels.
 
 | Curve | `--curve` | Mean level | Standard deviation |
 | --- | --- | ---: | ---: |
@@ -47,7 +47,7 @@ Curves of the kinds shown in the 2019 report (brightness, contrast and inversion
 3. **The histograms** (`Histogram1D.h`). Laganière's `Histogram1D` class computes the 256-bin histogram of the gray-level frame with `cv::calcHist` and draws it. The curve window draws the histogram of the current frame behind the curve.
 4. **Saving** (`VideoProcessor.h`). Laganière's `VideoProcessor` reads the video, calls the curve for every frame and writes the result with `cv::VideoWriter`. The output must be a different file from the input: by default it is `<name>_curves.avi` next to the input, and the program refuses an output that is the input, however the path is written. The writer is opened with the size and colour of the frames, every frame is checked against them before it is written, the number of frames written is reported, and the writer is closed so that the file is complete.
 
-The video is written as Motion JPEG, which OpenCV can always write to an AVI file and which keeps the levels the curve produced: decoded, every frame of the sample differs from the expected frame by less than 1.3 levels on average, and its mean level by less than 0.1. Re-encoding the sample with its own MPEG-4 codec through OpenCV's FFmpeg backend, with no curve, made the frames 2.8 levels darker on average and slightly green (blue lost 4.2 levels, red 3.2 and green 1.2), which a tool for adjusting levels should not do. The input's codec is used only if the output file cannot be written as Motion JPEG. Motion JPEG files are larger: 13 MB for the sample, which is 2.5 MB.
+The video is written as Motion JPEG, which OpenCV can always write to an AVI file and which keeps the levels the curve produced closely. With conda-forge's OpenCV on macOS, every decoded frame of the sample differs from the expected frame by less than 1.3 levels on average, and its mean level by less than 0.1; with Ubuntu 26.04's OpenCV 4.10 and FFmpeg 8.0, as in CI, by less than 2 levels and 1.4. Re-encoding the sample with its own MPEG-4 codec through OpenCV's FFmpeg backend on macOS, with no curve, made the frames 2.8 levels darker on average and slightly green (blue lost 4.2 levels, red 3.2 and green 1.2), which a tool for adjusting levels should not do. The input's codec is used only if the output file cannot be written as Motion JPEG. Motion JPEG files are larger: 13 MB for the sample, which is 2.5 MB.
 
 ## Building
 
@@ -78,7 +78,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$CONDA_PREFI
 cmake --build build
 ```
 
-CI builds and tests the code against Ubuntu's OpenCV packages. It has also been built and tested with OpenCV 4.6 and 4.11 from conda-forge on macOS (Apple Clang 17).
+CI builds and tests the code against Ubuntu's OpenCV packages (OpenCV 4.10 and FFmpeg 8.0 on Ubuntu 26.04 in November 2026). It has also been built and tested with OpenCV 4.6 and 4.11 from conda-forge on macOS (Apple Clang 17).
 
 ## Running
 
@@ -125,7 +125,7 @@ Without `--no-gui` the program opens the five windows of the 2019 version: *Vide
 - the curve is flat before the first point and after the last one, and its slope is continuous at the points;
 - `--curve` parsing and its error messages, point editing (adding, moving without passing a neighbour, keeping two points) and the drawing of the curve window.
 
-ctest also runs the headless mode on a copy of `barriers.avi` and checks the result with `tests/check_video.cpp`, which decodes the input and the written video, counts their frames (399 each), compares every written frame with the input frame after the curve (allowing 4 levels on average for the compression; Motion JPEG stays under 1.3) and checks that `frame_before.png` and `frame_after.png` are exactly the first frame before and after the curve. Further tests check the default output name, that the input video is unchanged afterwards, and the messages for an output that is the input (written as `dir/./barriers.avi`), a missing video, a bad `--curve`, an unknown option and an images path that is a file, which is reported before the video is processed. The windows are not covered by the tests.
+ctest also runs the headless mode on a copy of `barriers.avi` and checks the result with `tests/check_video.cpp`, which decodes the input and the written video, counts their frames (399 each), compares every written frame with the input frame after the curve (allowing 4 levels on average for the compression, and 2.5 for the mean level; Motion JPEG stays under 2 and 1.4 on both macOS and Ubuntu) and checks that `frame_before.png` and `frame_after.png` are exactly the first frame before and after the curve. Further tests check the default output name, that the input video is unchanged afterwards, and the messages for an output that is the input (written as `dir/./barriers.avi`), a missing video, a bad `--curve`, an unknown option and an images path that is a file, which is reported before the video is processed. The windows are not covered by the tests.
 
 ## Changes from the 2019 version
 

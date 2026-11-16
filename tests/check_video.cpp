@@ -27,11 +27,12 @@ namespace
 	// Largest mean absolute difference, in levels, allowed between an output
 	// frame and the input frame after the curve, and between their mean
 	// levels. With the curve 0:0,128:191,255:255, the Motion JPEG output of
-	// barriers.avi is within 1.3 and 0.1 levels, while a frame without the
-	// curve is off by more than 35 levels and the next or previous frame by
-	// more than 10.
+	// barriers.avi is within 1.3 and 0.1 levels with conda-forge's OpenCV on
+	// macOS, and within 2 and 1.4 levels with Ubuntu 26.04's OpenCV 4.10 and
+	// FFmpeg 8.0. A frame without the curve is off by more than 35 levels and
+	// the next or previous frame by more than 10.
 	constexpr double kMaxFrameError = 4.0;
-	constexpr double kMaxMeanError = 1.0;
+	constexpr double kMaxMeanError = 2.5;
 
 	int g_failures = 0;
 
